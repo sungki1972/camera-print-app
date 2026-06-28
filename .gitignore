@@ -1,0 +1,19 @@
+# Android
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+captures/
+.cxx/
+
+# Node / web
+web/node_modules
+web/.next
+web/.vercel
+
+# misc
+.DS_Store
+.omc/
+scratchpad/
