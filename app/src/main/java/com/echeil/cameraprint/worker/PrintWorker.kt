@@ -69,6 +69,7 @@ class PrintWorker(
                     if (runAttemptCount < MAX_UPLOADING_RETRIES) Result.retry()
                     else {
                         dao.updateStatus(logId, PrintLog.STATUS_FAILED, error = "처리 시간 초과")
+                        dao.getById(logId)?.let { SupabaseSync.syncStatus(applicationContext, it, PrintLog.STATUS_FAILED) }
                         Result.failure()
                     }
                 }

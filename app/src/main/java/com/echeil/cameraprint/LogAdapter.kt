@@ -16,7 +16,8 @@ import java.util.Locale
 
 class LogAdapter(
     private val onDelete: (PrintLog) -> Unit,
-    private val onRetry: (PrintLog) -> Unit
+    private val onRetry: (PrintLog) -> Unit,
+    private val onItemClick: (PrintLog) -> Unit = {}
 ) : RecyclerView.Adapter<LogAdapter.ViewHolder>() {
 
     private var items: List<PrintLog> = emptyList()
@@ -46,10 +47,15 @@ class LogAdapter(
         private val retryButton: ImageButton = view.findViewById(R.id.retryButton)
 
         private val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
+        private val fullDateFormat = SimpleDateFormat("yyyy년 MM월 dd일 HH:mm:ss", Locale.getDefault())
 
         fun bind(log: PrintLog) {
-            fileName.text = log.fileName
+            // 파일명 대신 날짜+시간 표시
+            fileName.text = fullDateFormat.format(Date(log.createdAt))
             dateText.text = dateFormat.format(Date(log.createdAt))
+
+            // 항목(열) 클릭 → 원본 이미지 확대
+            itemView.setOnClickListener { onItemClick(log) }
 
             // thumbnail
             val file = File(log.filePath)

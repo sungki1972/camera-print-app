@@ -61,7 +61,8 @@ class LogsActivity : AppCompatActivity() {
 
         adapter = LogAdapter(
             onDelete = { log -> confirmDelete(log) },
-            onRetry = { log -> retryPrint(log) }
+            onRetry = { log -> retryPrint(log) },
+            onItemClick = { log -> ImageZoom.show(this, log.filePath) }
         )
 
         recyclerView.layoutManager = LinearLayoutManager(this)

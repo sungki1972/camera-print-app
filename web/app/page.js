@@ -22,6 +22,13 @@ function fmtDate(iso) {
   return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+function fmtFull(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}년 ${p(d.getMonth() + 1)}월 ${p(d.getDate())}일 ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 export default function Page() {
   const [unlocked, setUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
@@ -133,24 +140,24 @@ export default function Page() {
 
       {filtered.map((l) => {
         const st = STATUS[l.status] || STATUS.pending;
+        const clickable = !!l.image_url;
         return (
-          <div className="card" key={l.id}>
+          <div
+            className="card"
+            key={l.id}
+            style={{ cursor: clickable ? "zoom-in" : "default" }}
+            onClick={() => clickable && setZoom(l.image_url)}
+          >
             {l.image_url ? (
-              <img
-                className="thumb"
-                src={l.image_url}
-                alt={l.file_name}
-                onClick={() => setZoom(l.image_url)}
-              />
+              <img className="thumb" src={l.image_url} alt="" />
             ) : (
               <div className="thumb">🖼️</div>
             )}
             <div className="info">
               <div className="row1">
                 <span className="badge" style={{ background: st.color }}>{st.label}</span>
-                <span className="date">{fmtDate(l.created_at)}</span>
               </div>
-              <div className="fname">{l.file_name}</div>
+              <div className="fname">{fmtFull(l.created_at)}</div>
               {l.status === "failed" && l.error_message && (
                 <div className="err">{l.error_message}</div>
               )}

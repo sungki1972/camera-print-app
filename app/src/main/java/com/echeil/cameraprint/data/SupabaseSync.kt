@@ -82,35 +82,38 @@ object SupabaseSync {
     }
 
     /**
-     * 썸네일 업로드 + 행 동기화. 성공/실패 종료 시 호출.
-     * @return 업로드된 공개 URL 또는 null
+     * 종료 상태 + 썸네일 동기화. 성공/실패 종료 시 호출.
+     * 1) 상태를 먼저 동기화 — 이미지 처리가 실패(OOM 등)해도 완료/실패는 반드시 웹에 반영됨.
+     * 2) 썸네일 업로드는 best-effort. 성공하면 image_url 만 추가로 동기화.
      */
     fun syncWithImage(context: Context, log: PrintLog, finalStatus: String) {
-        var publicUrl: String? = null
+        val finalLog = log.copy(status = finalStatus)
+
+        // (1) 상태 먼저 — 이미지와 독립적으로 보장
+        syncStatus(context, finalLog, statusOverride = finalStatus)
+
+        // (2) 썸네일 — Throwable(OutOfMemoryError 포함)까지 삼킴
         try {
             val file = File(log.filePath)
-            if (file.exists() && file.length() > 0) {
-                val jpeg = downscaleJpeg(log.filePath)
-                if (jpeg != null) {
-                    val path = storagePath(context, log.id)
-                    val uploadReq = Request.Builder()
-                        .url("$SUPABASE_URL/storage/v1/object/$BUCKET/$path")
-                        .header("apikey", ANON_KEY)
-                        .header("Authorization", "Bearer $ANON_KEY")
-                        .header("x-upsert", "true")
-                        .post(jpeg.toRequestBody("image/jpeg".toMediaType()))
-                        .build()
-                    PrintWorker.sharedClient.newCall(uploadReq).execute().use { resp ->
-                        if (resp.isSuccessful) {
-                            publicUrl = "$SUPABASE_URL/storage/v1/object/public/$BUCKET/$path"
-                        }
-                    }
+            if (!file.exists() || file.length() <= 0) return
+            val jpeg = downscaleJpeg(log.filePath) ?: return
+            val path = storagePath(context, log.id)
+            val uploadReq = Request.Builder()
+                .url("$SUPABASE_URL/storage/v1/object/$BUCKET/$path")
+                .header("apikey", ANON_KEY)
+                .header("Authorization", "Bearer $ANON_KEY")
+                .header("x-upsert", "true")
+                .post(jpeg.toRequestBody("image/jpeg".toMediaType()))
+                .build()
+            PrintWorker.sharedClient.newCall(uploadReq).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val publicUrl = "$SUPABASE_URL/storage/v1/object/public/$BUCKET/$path"
+                    syncStatus(context, finalLog, statusOverride = finalStatus, imageUrl = publicUrl)
                 }
             }
-        } catch (_: Exception) {
-            // 이미지 업로드 실패는 무시하고 메타데이터만 동기화
+        } catch (_: Throwable) {
+            // 이미지 실패는 무시 — 상태는 이미 (1)에서 동기화됨
         }
-        syncStatus(context, log.copy(status = finalStatus), statusOverride = finalStatus, imageUrl = publicUrl)
     }
 
     /** 행 삭제 동기화 — 앱에서 기록 삭제 시 웹에서도 사라지게 */
@@ -146,8 +149,10 @@ object SupabaseSync {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(path, bounds)
             val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+
+            // 디코드 단계에서 충분히 줄여 OOM 위험 최소화 (목표 크기 근처까지 inSampleSize로 축소)
             var sample = 1
-            while (maxDim / sample > THUMB_MAX_DIM * 2) sample *= 2
+            while (maxDim / (sample * 2) >= THUMB_MAX_DIM) sample *= 2
 
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             val bmp = BitmapFactory.decodeFile(path, opts) ?: return null
@@ -161,7 +166,8 @@ object SupabaseSync {
                 scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
                 out.toByteArray()
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
+            // OutOfMemoryError 포함 — 썸네일 실패가 상태 동기화를 막지 않도록
             null
         }
     }
